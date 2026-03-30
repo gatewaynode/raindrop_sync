@@ -20,40 +20,57 @@ cargo build --release
 
 The binary will be at `target/release/raindrop_sync`.
 
-### 3. Configure the output path (optional)
+### 3. Configure
 
-Edit `config.toml` in the project root:
+On first run, `raindrop_sync` automatically creates a config file at:
+
+```
+~/.config/raindrop_sync/config.toml
+```
+
+(or `$XDG_CONFIG_HOME/raindrop_sync/config.toml` if `XDG_CONFIG_HOME` is set)
+
+Open the file and add your API key — the app will not run until it is set:
 
 ```toml
+# Raindrop.io API key.
+# Get your test token from: https://app.raindrop.io/settings/integrations
+# The RAINDROP_TOKEN environment variable takes precedence if set.
+api_key = "paste_your_token_here"
+
+# Path where bookmarks.json and the filtered views will be written.
 output_path = "~/Documents/Claude/Projects/Continual Study and Research/bookmarks.json"
 ```
 
-If `config.toml` is absent, this default path is used. The `~` is expanded to `$HOME` at runtime.
+Both fields are optional to override — `output_path` has a sensible default if omitted.
 
 ## Command-line usage
 
-Set your token and run:
+Once configured, just run the binary:
 
 ```bash
-export RAINDROP_TOKEN=your_token_here
-./target/release/raindrop_sync
-```
-
-Or inline for a one-off sync:
-
-```bash
-RAINDROP_TOKEN=your_token_here ./target/release/raindrop_sync
+raindrop_sync
 ```
 
 Output:
 
 ```
 Synced 342 bookmarks to /Users/john/Documents/Claude/Projects/Continual Study and Research/bookmarks.json
+Filtered views written to /Users/john/Documents/Claude/Projects/Continual Study and Research:
+  last_day_bookmarks.json   — 3 bookmarks
+  last_week_bookmarks.json  — 18 bookmarks
+  last_month_bookmarks.json — 47 bookmarks
+```
+
+### Overriding the API key at runtime
+
+The `RAINDROP_TOKEN` environment variable takes precedence over the config file, useful for one-off runs or CI:
+
+```bash
+RAINDROP_TOKEN=your_token raindrop_sync
 ```
 
 ### Install to PATH
-
-To run `raindrop_sync` from anywhere:
 
 ```bash
 mkdir -p ~/.local/bin
@@ -71,30 +88,26 @@ Make sure `~/.local/bin` is on your PATH (add to `~/.zshrc` or `~/.bashrc` if no
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Then from any directory:
-
-```bash
-RAINDROP_TOKEN=your_token raindrop_sync
-```
-
 ### Shell alias
 
-Add to your `~/.zshrc` or `~/.bashrc` to set the token once and run with a short command:
+Add to your `~/.zshrc` or `~/.bashrc` to invoke with a short command:
 
 ```bash
-export RAINDROP_TOKEN=your_token_here
 alias bsync='raindrop_sync'
-```
-
-Then just:
-
-```bash
-bsync
 ```
 
 ## Output format
 
-The output file is a flat JSON array — one object per bookmark:
+Four files are written to the configured output directory on every sync:
+
+| File | Contents |
+|---|---|
+| `bookmarks.json` | All bookmarks |
+| `last_day_bookmarks.json` | Updated since midnight today |
+| `last_week_bookmarks.json` | Updated since Monday 00:00 |
+| `last_month_bookmarks.json` | Updated since the 1st of the current month |
+
+Each file is a flat JSON array:
 
 ```json
 [
@@ -113,7 +126,7 @@ The output file is a flat JSON array — one object per bookmark:
 ]
 ```
 
-Every run does a full sync and overwrites the file. The sync rate-limits itself to 60 requests/minute (half the API limit of 120/min), so it is safe to run frequently without risk of being throttled.
+Every run does a full sync and overwrites all files. The sync rate-limits itself to 60 requests/minute (half the API limit of 120/min).
 
 ## Scheduling
 
@@ -130,15 +143,8 @@ Create `~/Library/LaunchAgents/com.raindrop_sync.plist`:
   <string>com.raindrop_sync</string>
   <key>ProgramArguments</key>
   <array>
-    <string>~/.local/bin/raindrop_sync</string>
+    <string>/Users/john/.local/bin/raindrop_sync</string>
   </array>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>RAINDROP_TOKEN</key>
-    <string>your_token_here</string>
-  </dict>
-  <key>WorkingDirectory</key>
-  <string>/path/to/raindrop_sync</string>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key>
@@ -153,6 +159,8 @@ Create `~/Library/LaunchAgents/com.raindrop_sync.plist`:
 </dict>
 </plist>
 ```
+
+The API key is read from `~/.config/raindrop_sync/config.toml`, so no credentials need to appear in the plist.
 
 Load it:
 
@@ -169,7 +177,7 @@ launchctl unload ~/Library/LaunchAgents/com.raindrop_sync.plist
 ### cron (alternative)
 
 ```cron
-0 3 * * * RAINDROP_TOKEN=your_token ~/.local/bin/raindrop_sync
+0 3 * * * ~/.local/bin/raindrop_sync
 ```
 
 ## Development
