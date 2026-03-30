@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use reqwest::Client;
+use tracing::{debug, info};
 
 use crate::models::{ApiCollection, ApiItemsResponse, ApiListResponse, ApiRaindrop};
 
@@ -28,10 +29,11 @@ impl RaindropClient {
         let mut page = 0u32;
 
         loop {
-            let url = format!("{BASE_URL}/raindrops/0");
+            debug!(page, "fetching raindrops page");
+
             let resp: ApiListResponse<ApiRaindrop> = self
                 .client
-                .get(&url)
+                .get(format!("{BASE_URL}/raindrops/0"))
                 .bearer_auth(&self.token)
                 .query(&[
                     ("perpage", PER_PAGE.to_string()),
@@ -39,14 +41,15 @@ impl RaindropClient {
                 ])
                 .send()
                 .await
-                .context("failed to fetch raindrops")?
+                .with_context(|| format!("failed to fetch raindrops page {page}"))?
                 .error_for_status()
-                .context("raindrop API returned error")?
+                .with_context(|| format!("API error on raindrops page {page}"))?
                 .json()
                 .await
-                .context("failed to parse raindrops response")?;
+                .with_context(|| format!("failed to parse raindrops page {page}"))?;
 
             let count = resp.items.len();
+            debug!(page, count, "received raindrops page");
             all.extend(resp.items);
 
             if count < PER_PAGE as usize {
@@ -56,10 +59,13 @@ impl RaindropClient {
             tokio::time::sleep(REQUEST_INTERVAL).await;
         }
 
+        info!(total = all.len(), pages = page + 1, "fetched all raindrops");
         Ok(all)
     }
 
     pub async fn get_collections(&self) -> Result<Vec<ApiCollection>> {
+        debug!("fetching collections");
+
         let (root, children) = tokio::try_join!(
             self.fetch_collections("/collections"),
             self.fetch_collections("/collections/childrens"),
@@ -67,6 +73,8 @@ impl RaindropClient {
 
         let mut all = root;
         all.extend(children);
+
+        info!(total = all.len(), "fetched all collections");
         Ok(all)
     }
 

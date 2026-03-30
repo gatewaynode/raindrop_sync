@@ -92,7 +92,7 @@ fn ensure_config_exists(path: &Path) -> Result<()> {
         .with_context(|| format!("failed to create {}", dir.display()))?;
     std::fs::write(path, DEFAULT_CONFIG)
         .with_context(|| format!("failed to write default config to {}", path.display()))?;
-    eprintln!("Created default config at {}", path.display());
+    tracing::info!(path = %path.display(), "created default config");
     Ok(())
 }
 

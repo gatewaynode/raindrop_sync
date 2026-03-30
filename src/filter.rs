@@ -1,7 +1,8 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Datelike, Duration, Local, NaiveTime, TimeZone};
+use tracing::debug;
 
 use crate::models::Bookmark;
 
@@ -14,6 +15,10 @@ pub struct FilteredCounts {
 /// Write last_day, last_week, and last_month bookmark files into the same
 /// directory as the main bookmarks.json.
 pub fn write_filtered_files(bookmarks: &[Bookmark], dir: &Path) -> Result<FilteredCounts> {
+    // Ensure the output directory exists before writing any files.
+    std::fs::create_dir_all(dir)
+        .with_context(|| format!("failed to create output directory {}", dir.display()))?;
+
     let day_items = filter_by_cutoff(bookmarks, &start_of_today());
     let week_items = filter_by_cutoff(bookmarks, &start_of_week());
     let month_items = filter_by_cutoff(bookmarks, &start_of_month());
@@ -70,10 +75,11 @@ fn parse_timestamp(s: &str) -> Option<DateTime<Local>> {
         .map(|dt| dt.with_timezone(&Local))
 }
 
-fn write_json(path: std::path::PathBuf, items: &[&Bookmark]) -> Result<()> {
+fn write_json(path: PathBuf, items: &[&Bookmark]) -> Result<()> {
     let json = serde_json::to_string_pretty(items).context("failed to serialize bookmarks")?;
     std::fs::write(&path, json)
         .with_context(|| format!("failed to write {}", path.display()))?;
+    debug!(path = %path.display(), count = items.len(), "wrote filtered bookmarks");
     Ok(())
 }
 

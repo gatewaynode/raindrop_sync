@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use tracing::info;
 
 use crate::api::RaindropClient;
 use crate::filter::{write_filtered_files, FilteredCounts};
@@ -26,8 +27,12 @@ pub async fn sync(client: &RaindropClient, output_path: &Path) -> Result<SyncRes
     let bookmarks = map_bookmarks(raindrops, &collection_names);
     let total = bookmarks.len();
 
+    ensure_parent_dir(output_path)?;
+
     let json = serde_json::to_string_pretty(&bookmarks).context("failed to serialize bookmarks")?;
-    std::fs::write(output_path, json).context("failed to write bookmarks.json")?;
+    std::fs::write(output_path, &json)
+        .with_context(|| format!("failed to write {}", output_path.display()))?;
+    info!(path = %output_path.display(), count = total, "wrote bookmarks.json");
 
     let dir = output_path.parent().unwrap_or(Path::new("."));
     let filtered = write_filtered_files(&bookmarks, dir)?;
@@ -48,6 +53,16 @@ fn map_bookmarks(raindrops: Vec<ApiRaindrop>, collection_names: &HashMap<i64, St
             Bookmark::from_api(r, &name)
         })
         .collect()
+}
+
+fn ensure_parent_dir(path: &Path) -> Result<()> {
+    if let Some(dir) = path.parent()
+        && !dir.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(dir)
+            .with_context(|| format!("failed to create directory {}", dir.display()))?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
