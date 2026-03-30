@@ -1,5 +1,6 @@
 mod api;
 mod config;
+mod filter;
 mod models;
 mod sync;
 
@@ -16,8 +17,16 @@ async fn main() -> Result<()> {
     let config = Config::load()?;
     let client = RaindropClient::new(&token);
 
-    let count = sync::sync(&client, &config.output_path).await?;
-    println!("Synced {count} bookmarks to {}", config.output_path.display());
+    let result = sync::sync(&client, &config.output_path).await?;
+
+    println!("Synced {} bookmarks to {}", result.total, config.output_path.display());
+    println!(
+        "Filtered views written to {}:",
+        config.output_path.parent().unwrap_or(&config.output_path).display()
+    );
+    println!("  last_day_bookmarks.json   — {} bookmarks", result.filtered.day);
+    println!("  last_week_bookmarks.json  — {} bookmarks", result.filtered.week);
+    println!("  last_month_bookmarks.json — {} bookmarks", result.filtered.month);
 
     Ok(())
 }

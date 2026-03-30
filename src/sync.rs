@@ -4,9 +4,15 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::api::RaindropClient;
+use crate::filter::{write_filtered_files, FilteredCounts};
 use crate::models::{ApiRaindrop, Bookmark};
 
-pub async fn sync(client: &RaindropClient, output_path: &Path) -> Result<usize> {
+pub struct SyncResult {
+    pub total: usize,
+    pub filtered: FilteredCounts,
+}
+
+pub async fn sync(client: &RaindropClient, output_path: &Path) -> Result<SyncResult> {
     let (raindrops, collections) = tokio::try_join!(
         client.get_all_raindrops(),
         client.get_collections(),
@@ -18,12 +24,15 @@ pub async fn sync(client: &RaindropClient, output_path: &Path) -> Result<usize> 
         .collect();
 
     let bookmarks = map_bookmarks(raindrops, &collection_names);
-    let count = bookmarks.len();
+    let total = bookmarks.len();
 
     let json = serde_json::to_string_pretty(&bookmarks).context("failed to serialize bookmarks")?;
     std::fs::write(output_path, json).context("failed to write bookmarks.json")?;
 
-    Ok(count)
+    let dir = output_path.parent().unwrap_or(Path::new("."));
+    let filtered = write_filtered_files(&bookmarks, dir)?;
+
+    Ok(SyncResult { total, filtered })
 }
 
 fn map_bookmarks(raindrops: Vec<ApiRaindrop>, collection_names: &HashMap<i64, String>) -> Vec<Bookmark> {
